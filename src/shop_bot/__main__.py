@@ -129,13 +129,19 @@ def main():
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, lambda sig=sig: asyncio.create_task(shutdown(sig, loop)))
         
+        # On PaaS platforms (including Bothost) external proxy usually expects app on PORT env.
+        try:
+            web_port = int((os.getenv("PORT") or "3000").strip())
+        except Exception:
+            web_port = 3000
+
         flask_thread = threading.Thread(
-            target=lambda: flask_app.run(host='0.0.0.0', port=1488, use_reloader=False, debug=False),
+            target=lambda: flask_app.run(host='0.0.0.0', port=web_port, use_reloader=False, debug=False),
             daemon=True
         )
         flask_thread.start()
         
-        logger.info("Flask-сервер запущен: http://0.0.0.0:1488")
+        logger.info(f"Flask-сервер запущен: http://0.0.0.0:{web_port}")
         
         # Логика автоматического запуска ботов по переменным окружения
         auto_start = (os.getenv('SHOPBOT_AUTO_START') or '').strip().lower()

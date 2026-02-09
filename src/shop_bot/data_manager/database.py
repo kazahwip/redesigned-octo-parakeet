@@ -4,13 +4,35 @@ import logging
 from pathlib import Path
 import json
 import re
+import os
 from functools import lru_cache, wraps
 import time
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path("/app/project")
-DB_FILE = PROJECT_ROOT / "users.db"
+def _resolve_project_root() -> Path:
+    env_root = (os.getenv("SHOPBOT_PROJECT_ROOT") or "").strip()
+    if env_root:
+        return Path(env_root)
+
+    candidates = [
+        Path("/app/project"),
+        Path("/app"),
+        Path(__file__).resolve().parents[3],  # repo root for local/dev
+        Path.cwd(),
+    ]
+    for path in candidates:
+        try:
+            if path.exists():
+                return path
+        except Exception:
+            continue
+    return Path.cwd()
+
+
+PROJECT_ROOT = _resolve_project_root()
+_env_db_file = (os.getenv("SHOPBOT_DB_FILE") or "").strip()
+DB_FILE = Path(_env_db_file) if _env_db_file else (PROJECT_ROOT / "users.db")
 
 def normalize_host_name(name: str | None) -> str:
     """Normalize host name by trimming and removing invisible/unicode spaces.
@@ -45,6 +67,7 @@ def _clear_settings_cache() -> None:
 
 def initialize_db():
     try:
+        DB_FILE.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(DB_FILE) as conn:
             cursor = conn.cursor()
             cursor.execute('''

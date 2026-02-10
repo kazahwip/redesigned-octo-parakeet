@@ -2246,7 +2246,7 @@ def get_user_router() -> Router:
                 await bot.send_message(
                     int(admin_id),
                     text,
-                    reply_markup=keyboards.create_card_transfer_admin_keyboard(payment_id, callback.from_user.id),
+                    reply_markup=keyboards.create_card_transfer_admin_keyboard(payment_id),
                 )
             except Exception as e:
                 logger.warning(f"Не удалось отправить заявку на подтверждение админу {admin_id}: {e}")
@@ -2304,18 +2304,23 @@ def get_user_router() -> Router:
             await callback.answer("Недостаточно прав.", show_alert=True)
             return
 
-        raw = callback.data[len("admin_card_reject_"):]
-        parts = raw.split("_")
-        if len(parts) < 2:
-            await callback.answer("Некорректные данные.", show_alert=True)
-            return
-        payment_id = "_".join(parts[:-1]).strip()
-        user_id = _to_int_or_default(parts[-1], 0)
+        raw = callback.data[len("admin_card_reject_"):].strip()
+        payment_id = raw
+        user_id = 0
         if not payment_id:
             await callback.answer("Некорректный payment_id.", show_alert=True)
             return
 
         tx = get_transaction_by_payment_id(payment_id)
+        if not tx:
+            # Backward compatibility for old callback format: "<payment_id>_<user_id>"
+            parts = raw.rsplit("_", 1)
+            if len(parts) == 2:
+                payment_candidate, user_candidate = parts[0].strip(), parts[1].strip()
+                if payment_candidate:
+                    payment_id = payment_candidate
+                    user_id = _to_int_or_default(user_candidate, 0)
+                    tx = get_transaction_by_payment_id(payment_id)
         if not tx:
             await callback.answer("Транзакция не найдена.", show_alert=True)
             return
@@ -3465,3 +3470,6 @@ async def process_successful_payment(bot: Bot, metadata: dict):
                 await bot.send_message(chat_id=user_id, text="❌ Ошибка при выдаче ключа.")
             except Exception:
                 pass
+
+
+
